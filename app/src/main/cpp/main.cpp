@@ -4,7 +4,12 @@
 
 #include "zygisk.hpp"
 #include "json/single_include/nlohmann/json.hpp"
+#if defined(__x86_64__) || defined(__i386__)
+// shadowhook (inline hook) only supports arm and arm64; use ByteHook (PLT hook) for x86 ABIs
+#include "bytehook.h"
+#else
 #include "shadowhook.h"
+#endif
 
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "PIF/Native", __VA_ARGS__)
 
@@ -74,11 +79,51 @@ static void my_system_property_read_callback(const prop_info *pi, T_Callback cal
 
 #include <dlfcn.h>
 
+#if defined(__x86_64__) || defined(__i386__)
+static void bytehook_hooked_callback(bytehook_stub_t /* task_stub */, int status_code, const char *caller_path_name,
+                                     const char * /* sym_name */, void * /* new_func */, void *prev_func, void * /* arg */) {
+    if (status_code == BYTEHOOK_STATUS_CODE_ORIG_ADDR && prev_func != nullptr) {
+        o_system_property_read_callback = reinterpret_cast<decltype(o_system_property_read_callback)>(prev_func);
+        LOGD("bytehook captured original '__system_property_read_callback' for %s", caller_path_name);
+    }
+}
+#else
 extern "C" int sh_linker_init(void) {
     return 0;
 }
+#endif
 
 static void doHook() {
+#if defined(__x86_64__) || defined(__i386__)
+    // ByteHook patches the GOT/PLT entries of all caller libraries, it never modifies libc code,
+    // so the address resolved here by dlsym stays the real function before and after hooking
+    void *sym_addr = dlsym(RTLD_DEFAULT, "__system_property_read_callback");
+    if (sym_addr == nullptr) {
+        LOGD("Couldn't find '__system_property_read_callback' via dlsym");
+        return;
+    }
+
+    o_system_property_read_callback = reinterpret_cast<decltype(o_system_property_read_callback)>(sym_addr);
+
+    if (bytehook_init(BYTEHOOK_MODE_MANUAL, verboseLogs > 0) != 0) {
+        LOGD("Couldn't initialize bytehook");
+        return;
+    }
+
+    bytehook_stub_t stub = bytehook_hook_all(
+            nullptr,
+            "__system_property_read_callback",
+            reinterpret_cast<void *>(my_system_property_read_callback),
+            bytehook_hooked_callback,
+            nullptr
+    );
+
+    if (stub == nullptr) {
+        LOGD("Couldn't hook '__system_property_read_callback'");
+        return;
+    }
+    LOGD("bytehook hook_all for '__system_property_read_callback' submitted, stub at %p", stub);
+#else
     shadowhook_init(SHADOWHOOK_MODE_UNIQUE, false);
 
     void *sym_addr = dlsym(RTLD_DEFAULT, "__system_property_read_callback");
@@ -98,6 +143,7 @@ static void doHook() {
         return;
     }
     LOGD("Found '__system_property_read_callback' handle at %p", handle);
+#endif
 }
 
 static void setFieldNative(JNIEnv *env, jclass /* clazz_EntryPoint */, jclass targetClass, jobject fieldObj, jstring typeObj, jobject valueObj) {
