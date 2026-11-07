@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="color-scheme" content="dark light" />
+<title>Play Integrity Fork</title>
+<style>
+  :root{
+    --bg:#000; --surface:#111114; --surface2:#1a1a20; --line:#26262e;
+    --text:#eaeaef; --muted:#9a9aa6; --accent:#4d9fff; --accent-soft:#7cc4ff;
+    --ok:#39d98a; --warn:#ffcc66; --err:#ff6b6b; --r:16px;
+  }
+
+  /* system light, unless the user forced dark */
+  @media (prefers-color-scheme:light){
+    :root:not([data-theme="dark"]){ --bg:#f5f5f8; --surface:#fff; --surface2:#eeeef2; --line:#e3e3ea;
+      --text:#16161a; --muted:#65656f; --accent:#0a6cff; --accent-soft:#0a6cff; }
+  }
+
+  /* manual override */
+  :root[data-theme="light"]{ --bg:#f5f5f8; --surface:#fff; --surface2:#eeeef2; --line:#e3e3ea;
+    --text:#16161a; --muted:#65656f; --accent:#0a6cff; --accent-soft:#0a6cff; }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:system-ui,-apple-system,Roboto,"Segoe UI",sans-serif; line-height:1.45;
+    padding:max(env(safe-area-inset-top),14px) 16px calc(env(safe-area-inset-bottom) + 24px);
+    -webkit-tap-highlight-color:transparent;
+  }
+  .wrap{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+  header{display:flex;align-items:center;gap:12px;padding:2px}
+  header svg{width:30px;height:30px;flex:0 0 auto}
+  header h1{font-size:1.15rem;margin:0;font-weight:650}
+  header .sub{font-size:.72rem;color:var(--muted);margin-top:1px}
+  .grow{flex:1}
+  .ic{background:none;border:none;color:var(--muted);font-size:1.35rem;cursor:pointer;padding:6px;border-radius:10px}
+  .ic:active{background:var(--surface2)}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+
+  /* status */
+  .stat-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .stat-top .lbl{font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+  .badge{font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .badge.custom{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
+  .badge.canary{color:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+  .fp{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;word-break:break-all;color:var(--text)}
+  .meta{margin-top:8px;font-size:.76rem;color:var(--muted)}
+  .dates{margin-top:8px;font-size:.76rem;color:var(--muted)}
+
+  /* segmented source switch */
+  .seg{display:flex;background:var(--surface2);border-radius:12px;padding:4px;gap:4px}
+  .seg button{flex:1;border:none;background:none;color:var(--muted);font-size:.9rem;font-weight:600;
+    padding:11px;border-radius:9px;cursor:pointer;transition:.15s}
+  .seg button.on{background:var(--accent);color:#03121f}
+  .seg button:active{transform:scale(.98)}
+  .hint{font-size:.75rem;color:var(--muted);margin:10px 2px 0}
+  .util{display:flex;gap:10px;margin-top:14px}
+  .util button{flex:1;background:var(--surface2);border:1px solid var(--line);color:var(--text);
+    font-size:.84rem;font-weight:600;padding:10px;border-radius:11px;cursor:pointer}
+  .util button:active{transform:scale(.98)}
+  button:disabled{opacity:.5;pointer-events:none}
+
+  /* advanced */
+  details>summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;
+    font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary .chev{transition:.2s}
+  details[open]>summary .chev{transform:rotate(180deg)}
+  .flags{display:flex;flex-direction:column;gap:1px;margin-top:14px}
+  .flag{display:flex;align-items:center;gap:12px;padding:11px 2px;font-size:.9rem}
+  .flag+.flag{border-top:1px solid var(--line)}
+  .flag>span:not(.sw){flex:1}
+  .sw{position:relative;width:46px;height:27px;flex:0 0 auto;cursor:pointer}
+  .sw input{display:none}
+  .sw i{position:absolute;inset:0;background:var(--line);border-radius:999px;transition:.2s}
+  .sw i::after{content:"";position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;transition:.2s}
+  .sw input:checked + i{background:var(--accent)}
+  .sw input:checked + i::after{transform:translateX(19px)}
+
+  /* output */
+  #term{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:11px;margin-top:12px;
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;line-height:1.5;white-space:pre-wrap;
+    word-break:break-word;max-height:200px;overflow:auto;color:var(--accent-soft)}
+  #term .e{color:var(--err)} #term .g{color:var(--ok)} #term .w{color:var(--warn)} #term .m{color:var(--muted)}
+  .spin{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;
+    border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px;margin-left:6px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 2l8 4v6c0 4.4-3.1 8.2-8 10-4.9-1.8-8-5.6-8-10V6l8-4z" fill="var(--accent-soft)" opacity=".16"/><path d="M12 2l8 4v6c0 4.4-3.1 8.2-8 10-4.9-1.8-8-5.6-8-10V6l8-4z" stroke="var(--accent-soft)" stroke-width="1.5"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8" stroke="var(--accent-soft)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div>
+      <h1>Play Integrity Fork</h1>
+      <div class="sub" id="ver"></div>
+    </div>
+    <div class="grow"></div>
+    <button class="ic" id="theme" title="Theme">☾</button>
+    <button class="ic" id="refresh" title="Refresh">⟳</button>
+  </header>
+
+  <div class="card">
+    <div class="stat-top"><span class="lbl">Active Fingerprint</span><span class="badge" id="badge">—</span></div>
+    <div class="fp" id="fp">Loading…</div>
+    <div class="meta" id="meta"></div>
+    <div class="dates" id="dates"></div>
+  </div>
+
+  <div class="card">
+    <div class="stat-top"><span class="lbl">AutoPIF</span></div>
+    <div class="seg" id="seg">
+      <button data-mode="match" id="segMatch">Auto-Match Device (Default)</button>
+      <button data-mode="random" id="segRandom">Force Random</button>
+    </div>
+    <div class="hint" id="hint"></div>
+    <div class="util">
+      <button id="reapply">Reapply</button>
+      <button id="killPi">Kill PI Processes</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <details id="advBox">
+      <summary>Advanced Settings<span class="chev">▾</span></summary>
+      <div class="flags" id="flags"></div>
+    </details>
+  </div>
+
+  <div class="card">
+    <details id="outBox">
+      <summary>Output <span class="chev">▾</span></summary>
+      <div id="term"><span class="m">Ready.</span></div>
+    </details>
+  </div>
+</div>
+
+<script>
+const MODID="playintegrityfix";
+const MOD="/data/adb/modules/"+MODID;
+const CFG=MOD+"/custom.pif.prop";
+const MARK=MOD+"/skipmatchdevice";
+const FLAGS=["spoofBuild","spoofProps","spoofProvider","spoofSignature","spoofVendingFinger","spoofVendingSdk","verboseLogs"];
+const LABEL={spoofBuild:"Spoof Build",spoofProps:"Spoof Props",spoofProvider:"Spoof Provider",spoofSignature:"Spoof Signature",spoofVendingFinger:"Spoof Vending FINGERPRINT",spoofVendingSdk:"Spoof Vending SDK_INT",verboseLogs:"Verbose Logs"};
+
+const $=s=>document.querySelector(s);
+const term=$("#term");
+
+function log(m,c){const s=document.createElement("span");if(c)s.className=c;s.textContent=m+"\n";term.appendChild(s);term.scrollTop=term.scrollHeight;}
+
+function exec(cmd,opts){
+  return new Promise((res,rej)=>{
+    if(typeof ksu==="undefined"||!ksu.exec){rej(new Error("Root bridge (ksu.exec) unavailable"));return;}
+    const cb="__cb_"+Date.now()+"_"+Math.floor(performance.now()*1000%1e6);
+    window[cb]=(e,o,r)=>{delete window[cb];res({errno:Number(e)||0,stdout:o||"",stderr:r||""});};
+    try{ksu.exec(cmd,JSON.stringify(opts||{}),cb);}catch(err){delete window[cb];rej(err);}
+  });
+}
+
+function toast(m){try{if(typeof ksu!=="undefined"&&ksu.toast)ksu.toast(m);}catch(e){}}
+
+async function readConfig(){
+  const r=await exec(`cat ${CFG} 2>/dev/null`);const map={};
+  (r.stdout||"").split("\n").forEach(l=>{
+    const t=l.trim();if(!t)return;
+    const commented=t.startsWith("#");const body=commented?t.replace(/^#+\s*/,""):t;
+    const i=body.indexOf("=");if(i<0)return;
+    map[body.slice(0,i).trim()]={value:body.slice(i+1).split("#")[0].trim(),commented};
+  });return map;
+}
+const val=(m,k)=>m[k]?m[k].value:"";
+
+async function refresh(){
+  let map={},rand=false;
+  try{map=await readConfig();}catch(e){log(e.message,"e");}
+  try{rand=(await exec(`[ -f ${MARK} ] && echo 1 || echo 0`)).stdout.trim()==="1";}catch(e){}
+  const has=Object.keys(map).length>0;
+  const fp=val(map,"FINGERPRINT");
+  const isCanary=/^google\/.*CANARY/.test(fp);
+
+  const badge=$("#badge");
+  if(!has){badge.textContent="None";badge.className="badge";}
+  else if(isCanary){badge.textContent="● Canary";badge.className="badge canary";}
+  else{badge.textContent="● Custom";badge.className="badge custom";}
+
+  $("#fp").textContent=has?fp:"No fingerprint — choose an option below.";
+  const name=map["MANUFACTURER"].value+" "+map["MODEL"].value;
+  const apiTarget=map["*api_level"]||map["ro.product.first_api_level"];
+  const api=apiTarget?"First API "+apiTarget.value:"";
+  const patchTarget=map["*.security_patch"]||map["ro.build.version.security_patch"];
+  const patch=patchTarget?(patchTarget.commented?"Patch OFF":"Patch "+patchTarget.value):"";
+  const releaseTest=await exec(`grep -oE 'Released:.*' ${CFG} | tr -d ':'`);
+  const release=releaseTest.stdout.trim()?releaseTest.stdout.trim():"";
+  const expiryTest=await exec(`grep -oE 'Estimated Expiry:.*' ${CFG} | tr -d ':'`);
+  const expiry=expiryTest.stdout.trim()?expiryTest.stdout.trim():"";
+  $("#meta").textContent=has?[name,api,patch].filter(Boolean).join("  ·  "):"";
+  $("#dates").textContent=has?[release,expiry].filter(Boolean).join("  ·  "):"";
+
+  $("#segMatch").classList.toggle("on",!rand&&has);
+  $("#segRandom").classList.toggle("on",rand);
+  $("#hint").textContent=rand
+    ?"Force a random Pixel Canary print regardless of device."
+    :"Match Pixel Canary print on Beta/Canary Program supported Pixel devices, falling back to a random Pixel Canary print.";
+
+  const fl=$("#flags");fl.innerHTML="";
+  FLAGS.forEach(k=>{
+    const on=map[k]&&map[k].value==="1";
+    const el=document.createElement("label");el.className="flag";
+    el.innerHTML=`<span>${LABEL[k]}</span><span class="sw"><input type="checkbox" ${on?"checked":""}><i></i></span>`;
+    el.querySelector("input").addEventListener("change",e=>setFlag(k,e.target.checked?"1":"0"));
+    fl.appendChild(el);
+  });
+}
+
+async function setFlag(k,v){
+  try{await exec(`sed -i 's;^\\(${k}=\\).*;\\1${v};' ${CFG}`);toast(`${LABEL[k]} ${v==="1"?"on":"off"}`);log(`set ${k}=${v}`,"m");}
+  catch(e){log(e.message,"e");}
+}
+
+function busy(b){document.querySelectorAll("button").forEach(x=>x.disabled=b);$("#refresh").disabled=false;}
+
+async function run(args,label){
+  $("#outBox").open=true;log("\n$ autopif4 "+args,"g");
+  try{
+    const r=await exec(`sh ${MOD}/autopif4.sh ${args} 2>&1`);
+    (r.stdout||"").split("\n").forEach(l=>l.trim()&&log(l,/error|fail/i.test(l)?"e":(/warn/i.test(l)?"w":null)));
+    log(r.errno===0?"✓ "+label:"✗ exit "+r.errno,r.errno===0?"g":"e");
+  }catch(e){log(e.message,"e");}
+}
+
+async function setSource(mode){
+  busy(true);
+  try{
+    toast("Generating Canary fingerprint…");
+    if(mode==="random"){await exec(`touch ${MARK}`);await run("","Canary fingerprint applied");}
+    else{await exec(`rm -f ${MARK}`);await run("-m","Canary fingerprint applied");}
+  }catch(e){log(e.message,"e");}
+  await refresh();busy(false);
+}
+
+$("#segMatch").onclick=()=>setSource("match");
+$("#segRandom").onclick=()=>setSource("random");
+$("#reapply").onclick=async()=>{const rand=$("#segRandom").classList.contains("on");await setSource(rand?"random":"match");};
+$("#killPi").onclick=async()=>{busy(true);$("#outBox").open=true;log("\n$ killpi","g");try{const r=await exec(`sh ${MOD}/killpi.sh 2>&1`);(r.stdout||"").split("\n").forEach(l=>l.trim()&&log(l,"m"));log("✓ PI processes killed","g");}catch(e){log(e.message,"e");}busy(false);};
+$("#refresh").onclick=refresh;
+
+// theme: system by default, manual override persisted
+function curTheme(){
+  const t=document.documentElement.getAttribute("data-theme");
+  if(t)return t;
+  return (window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches)?"light":"dark";
+}
+function applyTheme(t){
+  const root=document.documentElement;
+  if(t==="light"||t==="dark")root.setAttribute("data-theme",t);else root.removeAttribute("data-theme");
+  $("#theme").textContent=curTheme()==="light"?"☀":"☾";
+}
+try{applyTheme(localStorage.getItem("pif-theme"));}catch(e){applyTheme(null);}
+$("#theme").onclick=()=>{const n=curTheme()==="light"?"dark":"light";try{localStorage.setItem("pif-theme",n);}catch(e){}applyTheme(n);};
+
+(async()=>{
+  try{const v=await exec(`grep '^version=' ${MOD}/module.prop | cut -d= -f2`);if(v.stdout.trim())$("#ver").textContent=v.stdout.trim()+" · Settings";}catch(e){}
+  await refresh();
+})();
+</script>
+</body>
+</html>
