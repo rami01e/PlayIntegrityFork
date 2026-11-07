@@ -1,6 +1,7 @@
 #include <android/log.h>
 #include <sys/system_properties.h>
 #include <unistd.h>
+#include <cstring>
 
 #include "zygisk.hpp"
 #include "json/single_include/nlohmann/json.hpp"
@@ -77,14 +78,64 @@ static void my_system_property_read_callback(const prop_info *pi, T_Callback cal
     return o_system_property_read_callback(pi, modify_callback, cookie);
 }
 
+#if defined(__x86_64__) || defined(__i386__)
+// On x86 ByteHook can only patch caller GOTs, it never modifies libc code, so libc-internal callers
+// of '__system_property_read_callback' can't be intercepted (arm64 shadowhook inline hooks can).
+// '__system_property_get' is one such internal caller, so hook it separately via PLT to keep
+// spoofing native property reads (property_get in libcutils/libbase, GMS native code, etc.).
+static void get_transfer_callback(void *cookie, const char *name, const char *value, uint32_t /* serial */) {
+    if (cookie == nullptr || name == nullptr || value == nullptr) return;
+
+    auto *buf = static_cast<char *>(cookie);
+    const char *oldValue = value;
+    const char *out = value;
+
+    std::string prop(name);
+
+    if (jsonProps.count(prop)) {
+        // Exact property match
+        out = jsonProps[prop].c_str();
+    } else {
+        // Leading * wildcard property match
+        for (const auto &p: jsonProps) {
+            if (p.first.starts_with("*") && prop.ends_with(p.first.substr(1))) {
+                out = p.second.c_str();
+                break;
+            }
+        }
+    }
+
+    if (out != oldValue) LOGD("[%s]: %s -> %s", name, oldValue, out);
+
+    size_t len = strnlen(out, PROP_VALUE_MAX - 1);
+    memcpy(buf, out, len);
+    buf[len] = '\0';
+}
+
+static int my_system_property_get(const char *name, char *value) {
+    if (name == nullptr || value == nullptr) return -1;
+
+    const prop_info *pi = __system_property_find(name);
+    if (pi == nullptr) return -1;
+
+    // call the real '__system_property_read_callback' directly (not our hooked version) so the
+    // spoofing is applied exactly once, here, via get_transfer_callback
+    o_system_property_read_callback(pi, get_transfer_callback, value);
+
+    return static_cast<int>(strlen(value));
+}
+#endif
+
 #include <dlfcn.h>
 
 #if defined(__x86_64__) || defined(__i386__)
 static void bytehook_hooked_callback(bytehook_stub_t /* task_stub */, int status_code, const char *caller_path_name,
-                                     const char * /* sym_name */, void * /* new_func */, void *prev_func, void * /* arg */) {
+                                     const char *sym_name, void * /* new_func */, void *prev_func, void * /* arg */) {
     if (status_code == BYTEHOOK_STATUS_CODE_ORIG_ADDR && prev_func != nullptr) {
-        o_system_property_read_callback = reinterpret_cast<decltype(o_system_property_read_callback)>(prev_func);
-        LOGD("bytehook captured original '__system_property_read_callback' for %s", caller_path_name);
+        if (strcmp(sym_name, "__system_property_read_callback") == 0) {
+            o_system_property_read_callback = reinterpret_cast<decltype(o_system_property_read_callback)>(prev_func);
+        }
+        LOGD("bytehook captured original '%s' for %s", sym_name, caller_path_name);
     }
 }
 #else
@@ -123,6 +174,20 @@ static void doHook() {
         return;
     }
     LOGD("bytehook hook_all for '__system_property_read_callback' submitted, stub at %p", stub);
+
+    bytehook_stub_t stubGet = bytehook_hook_all(
+            nullptr,
+            "__system_property_get",
+            reinterpret_cast<void *>(my_system_property_get),
+            bytehook_hooked_callback,
+            nullptr
+    );
+
+    if (stubGet == nullptr) {
+        LOGD("Couldn't hook '__system_property_get'");
+    } else {
+        LOGD("bytehook hook_all for '__system_property_get' submitted, stub at %p", stubGet);
+    }
 #else
     shadowhook_init(SHADOWHOOK_MODE_UNIQUE, false);
 
