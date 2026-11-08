@@ -36,4 +36,5 @@ spoofProvider=1
 spoofSignature=0
 spoofVendingFinger=0
 spoofVendingSdk=0
+spoofVendingBuild=0
 verboseLogs=0

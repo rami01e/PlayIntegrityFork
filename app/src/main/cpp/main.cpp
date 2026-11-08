@@ -32,6 +32,7 @@ static int spoofProvider = 1;
 static int spoofSignature = 0;
 static int spoofVendingFinger = 0;
 static int spoofVendingSdk = 0;
+static int spoofVendingBuild = 0;
 
 static std::map<std::string, std::string> jsonProps;
 
@@ -367,11 +368,15 @@ public:
 
         readJson();
 
-        if (pkgName == VENDING_PACKAGE) spoofBuild = spoofProps = spoofProvider = spoofSignature = 0;
-        else spoofVendingFinger = spoofVendingSdk = 0;
+        if (pkgName == VENDING_PACKAGE) {
+            spoofProps = spoofProvider = spoofSignature = 0;
+            if (spoofVendingBuild < 1) spoofBuild = 0;
+        } else {
+            spoofVendingFinger = spoofVendingSdk = spoofVendingBuild = 0;
+        }
 
         if (spoofProps > 0) doHook();
-        if (spoofBuild + spoofProvider + spoofSignature + spoofVendingFinger + spoofVendingSdk > 0) inject();
+        if (spoofBuild + spoofProvider + spoofSignature + spoofVendingFinger + spoofVendingSdk + spoofVendingBuild > 0) inject();
 
         dexVector.clear();
         json.clear();
@@ -430,7 +435,34 @@ private:
             }
             json.erase("spoofVendingFinger");
         }
+        if (json.contains("spoofVendingBuild")) {
+            if (!json["spoofVendingBuild"].is_null() && json["spoofVendingBuild"].is_string() && json["spoofVendingBuild"] != "") {
+                if (json["spoofVendingBuild"].get<std::string>().find_first_not_of("01") != std::string::npos) {
+                    LOGD("Error parsing spoofVendingBuild!");
+                } else {
+                    spoofVendingBuild = stoi(json["spoofVendingBuild"].get<std::string>());
+                    if (verboseLogs > 0) LOGD("Spoofing Build Fields in Play Store %s!", (spoofVendingBuild > 0) ? "enabled" : "disabled");
+                }
+            } else {
+                LOGD("Error parsing spoofVendingBuild!");
+            }
+            json.erase("spoofVendingBuild");
+        }
         if (pkgName == VENDING_PACKAGE) {
+            if (spoofVendingBuild > 0) {
+                // Keep Build Fields for the dex, drop properties and DroidGuard-only Advanced Settings
+                for (auto it = json.begin(); it != json.end();) {
+                    const std::string key = it.key();
+                    if (key.find_first_of(".*") != std::string::npos ||
+                        key == "spoofBuild" || key == "spoofProps" || key == "spoofProvider" || key == "spoofSignature") {
+                        it = json.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+                if (verboseLogs > 0) LOGD("Keeping %d Build Fields for Play Store spoofing!", static_cast<int>(json.size()));
+                return;
+            }
             json.clear();
             return;
         }
@@ -525,10 +557,17 @@ private:
         env->RegisterNatives(entryClass, methods, 1);
 
         if (pkgName == VENDING_PACKAGE) {
+            if (spoofVendingBuild > 0 && !json.empty()) {
+                LOGD("JNI %s: Sending JSON", niceName);
+                auto receiveJson = env->GetStaticMethodID(entryClass, "receiveJson", "(Ljava/lang/String;)V");
+                auto jsonStr = env->NewStringUTF(json.dump().c_str());
+                env->CallStaticVoidMethod(entryClass, receiveJson, jsonStr);
+                env->DeleteLocalRef(jsonStr);
+            }
             LOGD("JNI %s: Calling EntryPointVending.init", niceName);
-            auto entryInit = env->GetStaticMethodID(entryClass, "init", "(IIILjava/lang/String;)V");
+            auto entryInit = env->GetStaticMethodID(entryClass, "init", "(IIIILjava/lang/String;)V");
             auto javaStr = env->NewStringUTF(vendingFingerprintValue.c_str());
-            env->CallStaticVoidMethod(entryClass, entryInit, verboseLogs, spoofVendingFinger, spoofVendingSdk, javaStr);
+            env->CallStaticVoidMethod(entryClass, entryInit, verboseLogs, spoofVendingFinger, spoofVendingSdk, spoofVendingBuild, javaStr);
             env->DeleteLocalRef(javaStr);
         } else {
             LOGD("JNI %s: Sending JSON", niceName);

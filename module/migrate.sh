@@ -143,7 +143,7 @@ if [ -z "$DEVICE_INITIAL_SDK_INT" -o "$DEVICE_INITIAL_SDK_INT" = "null" ]; then
   DEVICE_INITIAL_SDK_INT=25;
 fi;
 
-ADVSETTINGS="spoofBuild spoofProps spoofProvider spoofSignature spoofVendingFinger spoofVendingSdk verboseLogs";
+ADVSETTINGS="spoofBuild spoofProps spoofProvider spoofSignature spoofVendingFinger spoofVendingSdk spoofVendingBuild verboseLogs";
 
 spoofBuild=1;
 spoofProps=1;
@@ -151,6 +151,7 @@ spoofProvider=1;
 spoofSignature=0;
 spoofVendingFinger=0;
 spoofVendingSdk=0;
+spoofVendingBuild=0;
 verboseLogs=0;
 
 keep_advanced() {
@@ -200,6 +201,12 @@ echo "$PRE"'ro.product.name'"$MID$PRODUCT$POST";
 echo "$SECPRE1$SECURITY_COMMENT$SECPRE2"'ro.build.version.security_patch'"$MID$SECURITY_PATCH$POST";
 echo "$PRE"'ro.board.first_api_level'"$MID"'32'"$POST";
 echo "$PRE"'ro.product.first_api_level'"$MID$DEVICE_INITIAL_SDK_INT$POST";
+echo "$PRE"'*build.fingerprint'"$MID$FINGERPRINT$POST";
+echo "$PRE"'*product.brand'"$MID$BRAND$POST";
+echo "$PRE"'*product.manufacturer'"$MID$MANUFACTURER$POST";
+echo "$PRE"'*product.model'"$MID$MODEL$POST";
+echo "$PRE"'*product.device'"$MID$DEVICE$POST";
+echo "$PRE"'*product.name'"$MID$PRODUCT$POST";
 if [ "$ADVANCED" ]; then
   echo "$N$CMNT Advanced Settings";
   for SETTING in $ADVSETTINGS; do

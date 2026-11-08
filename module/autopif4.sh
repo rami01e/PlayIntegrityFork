@@ -233,7 +233,7 @@ if [ -f "$MIGRATE" ]; then
       fi;
     }
     verboseLogs=$(grep_config "VERBOSE_LOGS" $OLDPIF);
-    ADVSETTINGS="spoofBuild spoofProps spoofProvider spoofSignature spoofVendingFinger spoofVendingSdk verboseLogs";
+    ADVSETTINGS="spoofBuild spoofProps spoofProvider spoofSignature spoofVendingFinger spoofVendingSdk spoofVendingBuild verboseLogs";
     for SETTING in $ADVSETTINGS; do
       eval [ -z \"\$$SETTING\" ] \&\& $SETTING=$(grep_config "$SETTING" $OLDPIF);
       eval TMPVAL=\$$SETTING;
