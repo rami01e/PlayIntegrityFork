@@ -30,8 +30,14 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    - name: Build with Gradle
-      run: ./gradlew --warning-mode all assembleRelease
+    - name: Build with Gradle (retries)
+      run: |
+        for i in 1 2 3; do
+          ./gradlew --warning-mode all assembleRelease && exit 0
+          echo "::warning::Gradle attempt $i failed, retrying in 30s"
+          sleep 30
+        done
+        exit 1
 
     - name: Label CI version when not a final release code
       run: |
