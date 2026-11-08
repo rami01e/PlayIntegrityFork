@@ -30,12 +30,17 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
+    - name: Setup Gradle (cache deps + wrapper)
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        dependency-graph: disabled
+
     - name: Build with Gradle (retries)
       run: |
-        for i in 1 2 3; do
-          ./gradlew --warning-mode all assembleRelease && exit 0
-          echo "::warning::Gradle attempt $i failed, retrying in 30s"
-          sleep 30
+        for i in 1 2 3 4 5; do
+          ./gradlew --warning-mode all --no-configuration-cache assembleRelease && exit 0
+          echo "::warning::Gradle attempt $i failed, retrying in 60s"
+          sleep 60
         done
         exit 1
 
