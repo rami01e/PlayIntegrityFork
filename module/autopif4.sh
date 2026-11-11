@@ -9,8 +9,8 @@ esac;
 
 until [ -z "$1" ]; do
   case "$1" in
-    -h|--help|help) echo "sh autopif4.sh [-a|-s] [-m]"; exit 0;;
-    -a|--advanced|advanced) ARGS="-a"; shift;;
+    -h|--help|help) echo "sh autopif4.sh [-s] [-m]"; exit 0;;
+    -a|--advanced|advanced) shift;;
     -s|--strong|strong) FORCE_STRONG=1; shift;;
     -m|--match|match) FORCE_MATCH=1; shift;;
     *) break;;
@@ -208,14 +208,13 @@ if [ -f "$MIGRATE" ]; then
     [ -f "$OLDPIF" ] && break;
   done;
   if [ -f "$OLDPIF" ]; then
-    grep -qE '//"*.security_patch"|#*.security_patch' $OLDPIF && PATCH_COMMENT=1;
-    grep -qE "verboseLogs|VERBOSE_LOGS" $OLDPIF && ARGS="-a";
+    grep -qE '//".*security_patch"|#.*security_patch' $OLDPIF && PATCH_COMMENT=1;
   else
     FORCE_STRONG=1;
   fi;
   if [ "$FORCE_STRONG" ]; then
     item "Forcing configuration for <A13 PI Strong ...";
-    ARGS="-a"; PATCH_COMMENT=1; spoofProvider=0;
+    PATCH_COMMENT=1; spoofProvider=0;
   else
     item "Retaining existing configuration ...";
   fi;
