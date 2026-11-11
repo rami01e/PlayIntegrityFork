@@ -221,22 +221,24 @@ if [ -f "$MIGRATE" ]; then
   [ -d /data/adb/tricky_store -o -d /data/adb/teesim -o -d /data/adb/omk ] && unset PATCH_COMMENT;
   item "Converting pif.prop to custom.pif.prop with migrate.sh:";
   rm -f pif.json custom.pif.json custom.pif.prop;
-  sh $MIGRATE -i pif.prop;
-  grep_config() {
-    if [ -f "$2" ]; then
-      case $2 in
-        *.json) grep -m1 "$1" $2 | cut -d\" -f4;;
-        *.prop) grep -m1 "$1=" "$2" | cut -d= -f2 | cut -d\# -f1 | sed 's/[[:space:]]*$//';;
-      esac;
-    fi;
-  }
-  verboseLogs=$(grep_config "VERBOSE_LOGS" $OLDPIF);
-  ADVSETTINGS="spoofBuild spoofProps spoofProvider spoofSignature spoofVendingFinger spoofVendingSdk verboseLogs";
-  for SETTING in $ADVSETTINGS; do
-    eval [ -z \"\$$SETTING\" ] \&\& $SETTING=$(grep_config "$SETTING" $OLDPIF);
-    eval TMPVAL=\$$SETTING;
-    [ -n "$TMPVAL" ] && sed -i "s;\($SETTING=\).;\1$TMPVAL;" custom.pif.prop;
-  done;
+  sh $MIGRATE -i $ARGS pif.prop;
+  if [ -n "$ARGS" ]; then
+    grep_config() {
+      if [ -f "$2" ]; then
+        case $2 in
+          *.json) grep -m1 "$1" $2 | cut -d\" -f4;;
+          *.prop) grep -m1 "$1=" "$2" | cut -d= -f2 | cut -d\# -f1 | sed 's/[[:space:]]*$//';;
+        esac;
+      fi;
+    }
+    verboseLogs=$(grep_config "VERBOSE_LOGS" $OLDPIF);
+    ADVSETTINGS="spoofBuild spoofProps spoofProvider spoofSignature spoofVendingFinger spoofVendingSdk spoofVendingBuild verboseLogs";
+    for SETTING in $ADVSETTINGS; do
+      eval [ -z \"\$$SETTING\" ] \&\& $SETTING=$(grep_config "$SETTING" $OLDPIF);
+      eval TMPVAL=\$$SETTING;
+      [ -n "$TMPVAL" ] && sed -i "s;\($SETTING=\).;\1$TMPVAL;" custom.pif.prop;
+    done;
+  fi;
   [ "$PATCH_COMMENT" ] && sed -i 's;ro.build.version.security_patch;#ro.build.version.security_patch;' custom.pif.prop;
   echo "\n# Canary Released: $CANARY_REL_DATE\n# Estimated Expiry: $CANARY_EXP_DATE" >> custom.pif.prop;
   cat custom.pif.prop;

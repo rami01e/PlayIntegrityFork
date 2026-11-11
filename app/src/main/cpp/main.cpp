@@ -1,10 +1,16 @@
 #include <android/log.h>
 #include <sys/system_properties.h>
 #include <unistd.h>
+#include <cstring>
 
 #include "zygisk.hpp"
 #include "json/single_include/nlohmann/json.hpp"
+#if defined(__x86_64__) || defined(__i386__)
+// shadowhook (inline hook) only supports arm and arm64; use ByteHook (PLT hook) for x86 ABIs
+#include "bytehook.h"
+#else
 #include "shadowhook.h"
+#endif
 
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, "PIF/Native", __VA_ARGS__)
 
@@ -26,6 +32,7 @@ static int spoofProvider = 1;
 static int spoofSignature = 0;
 static int spoofVendingFinger = 0;
 static int spoofVendingSdk = 0;
+static int spoofVendingBuild = 0;
 
 static std::map<std::string, std::string> jsonProps;
 
@@ -72,13 +79,117 @@ static void my_system_property_read_callback(const prop_info *pi, T_Callback cal
     return o_system_property_read_callback(pi, modify_callback, cookie);
 }
 
+#if defined(__x86_64__) || defined(__i386__)
+// On x86 ByteHook can only patch caller GOTs, it never modifies libc code, so libc-internal callers
+// of '__system_property_read_callback' can't be intercepted (arm64 shadowhook inline hooks can).
+// '__system_property_get' is one such internal caller, so hook it separately via PLT to keep
+// spoofing native property reads (property_get in libcutils/libbase, GMS native code, etc.).
+static void get_transfer_callback(void *cookie, const char *name, const char *value, uint32_t /* serial */) {
+    if (cookie == nullptr || name == nullptr || value == nullptr) return;
+
+    auto *buf = static_cast<char *>(cookie);
+    const char *oldValue = value;
+    const char *out = value;
+
+    std::string prop(name);
+
+    if (jsonProps.count(prop)) {
+        // Exact property match
+        out = jsonProps[prop].c_str();
+    } else {
+        // Leading * wildcard property match
+        for (const auto &p: jsonProps) {
+            if (p.first.starts_with("*") && prop.ends_with(p.first.substr(1))) {
+                out = p.second.c_str();
+                break;
+            }
+        }
+    }
+
+    if (out != oldValue) LOGD("[%s]: %s -> %s", name, oldValue, out);
+
+    size_t len = strnlen(out, PROP_VALUE_MAX - 1);
+    memcpy(buf, out, len);
+    buf[len] = '\0';
+}
+
+static int my_system_property_get(const char *name, char *value) {
+    if (name == nullptr || value == nullptr) return -1;
+
+    const prop_info *pi = __system_property_find(name);
+    if (pi == nullptr) return -1;
+
+    // call the real '__system_property_read_callback' directly (not our hooked version) so the
+    // spoofing is applied exactly once, here, via get_transfer_callback
+    o_system_property_read_callback(pi, get_transfer_callback, value);
+
+    return static_cast<int>(strlen(value));
+}
+#endif
+
 #include <dlfcn.h>
 
+#if defined(__x86_64__) || defined(__i386__)
+static void bytehook_hooked_callback(bytehook_stub_t /* task_stub */, int status_code, const char *caller_path_name,
+                                     const char *sym_name, void * /* new_func */, void *prev_func, void * /* arg */) {
+    if (status_code == BYTEHOOK_STATUS_CODE_ORIG_ADDR && prev_func != nullptr) {
+        if (strcmp(sym_name, "__system_property_read_callback") == 0) {
+            o_system_property_read_callback = reinterpret_cast<decltype(o_system_property_read_callback)>(prev_func);
+        }
+        LOGD("bytehook captured original '%s' for %s", sym_name, caller_path_name);
+    }
+}
+#else
 extern "C" int sh_linker_init(void) {
     return 0;
 }
+#endif
 
 static void doHook() {
+#if defined(__x86_64__) || defined(__i386__)
+    // ByteHook patches the GOT/PLT entries of all caller libraries, it never modifies libc code,
+    // so the address resolved here by dlsym stays the real function before and after hooking
+    void *sym_addr = dlsym(RTLD_DEFAULT, "__system_property_read_callback");
+    if (sym_addr == nullptr) {
+        LOGD("Couldn't find '__system_property_read_callback' via dlsym");
+        return;
+    }
+
+    o_system_property_read_callback = reinterpret_cast<decltype(o_system_property_read_callback)>(sym_addr);
+
+    if (bytehook_init(BYTEHOOK_MODE_MANUAL, verboseLogs > 0) != 0) {
+        LOGD("Couldn't initialize bytehook");
+        return;
+    }
+
+    bytehook_stub_t stub = bytehook_hook_all(
+            nullptr,
+            "__system_property_read_callback",
+            reinterpret_cast<void *>(my_system_property_read_callback),
+            bytehook_hooked_callback,
+            nullptr
+    );
+
+    if (stub == nullptr) {
+        LOGD("Couldn't hook '__system_property_read_callback'");
+        return;
+    }
+    LOGD("bytehook hook_all for '__system_property_read_callback' submitted, stub at %p", stub);
+
+    bytehook_stub_t stubGet = bytehook_hook_all(
+            nullptr,
+            "__system_property_get",
+            reinterpret_cast<void *>(my_system_property_get),
+            bytehook_hooked_callback,
+            nullptr
+    );
+
+    if (stubGet == nullptr) {
+        LOGD("Couldn't hook '__system_property_get'");
+    } else {
+        LOGD("bytehook hook_all for '__system_property_get' submitted, stub at %p", stubGet);
+    }
+#else
     shadowhook_init(SHADOWHOOK_MODE_UNIQUE, false);
 
     void *sym_addr = dlsym(RTLD_DEFAULT, "__system_property_read_callback");
@@ -98,6 +209,7 @@ static void doHook() {
         return;
     }
     LOGD("Found '__system_property_read_callback' handle at %p", handle);
+#endif
 }
 
 static void setFieldNative(JNIEnv *env, jclass /* clazz_EntryPoint */, jclass targetClass, jobject fieldObj, jstring typeObj, jobject valueObj) {
@@ -256,11 +368,15 @@ public:
 
         readJson();
 
-        if (pkgName == VENDING_PACKAGE) spoofBuild = spoofProps = spoofProvider = spoofSignature = 0;
-        else spoofVendingFinger = spoofVendingSdk = 0;
+        if (pkgName == VENDING_PACKAGE) {
+            spoofProps = spoofProvider = spoofSignature = 0;
+            if (spoofVendingBuild < 1) spoofBuild = 0;
+        } else {
+            spoofVendingFinger = spoofVendingSdk = spoofVendingBuild = 0;
+        }
 
         if (spoofProps > 0) doHook();
-        if (spoofBuild + spoofProvider + spoofSignature + spoofVendingFinger + spoofVendingSdk > 0) inject();
+        if (spoofBuild + spoofProvider + spoofSignature + spoofVendingFinger + spoofVendingSdk + spoofVendingBuild > 0) inject();
 
         dexVector.clear();
         json.clear();
@@ -319,7 +435,34 @@ private:
             }
             json.erase("spoofVendingFinger");
         }
+        if (json.contains("spoofVendingBuild")) {
+            if (!json["spoofVendingBuild"].is_null() && json["spoofVendingBuild"].is_string() && json["spoofVendingBuild"] != "") {
+                if (json["spoofVendingBuild"].get<std::string>().find_first_not_of("01") != std::string::npos) {
+                    LOGD("Error parsing spoofVendingBuild!");
+                } else {
+                    spoofVendingBuild = stoi(json["spoofVendingBuild"].get<std::string>());
+                    if (verboseLogs > 0) LOGD("Spoofing Build Fields in Play Store %s!", (spoofVendingBuild > 0) ? "enabled" : "disabled");
+                }
+            } else {
+                LOGD("Error parsing spoofVendingBuild!");
+            }
+            json.erase("spoofVendingBuild");
+        }
         if (pkgName == VENDING_PACKAGE) {
+            if (spoofVendingBuild > 0) {
+                // Keep Build Fields for the dex, drop properties and DroidGuard-only Advanced Settings
+                for (auto it = json.begin(); it != json.end();) {
+                    const std::string key = it.key();
+                    if (key.find_first_of(".*") != std::string::npos ||
+                        key == "spoofBuild" || key == "spoofProps" || key == "spoofProvider" || key == "spoofSignature") {
+                        it = json.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+                if (verboseLogs > 0) LOGD("Keeping %d Build Fields for Play Store spoofing!", static_cast<int>(json.size()));
+                return;
+            }
             json.clear();
             return;
         }
@@ -414,10 +557,17 @@ private:
         env->RegisterNatives(entryClass, methods, 1);
 
         if (pkgName == VENDING_PACKAGE) {
+            if (spoofVendingBuild > 0 && !json.empty()) {
+                LOGD("JNI %s: Sending JSON", niceName);
+                auto receiveJson = env->GetStaticMethodID(entryClass, "receiveJson", "(Ljava/lang/String;)V");
+                auto jsonStr = env->NewStringUTF(json.dump().c_str());
+                env->CallStaticVoidMethod(entryClass, receiveJson, jsonStr);
+                env->DeleteLocalRef(jsonStr);
+            }
             LOGD("JNI %s: Calling EntryPointVending.init", niceName);
-            auto entryInit = env->GetStaticMethodID(entryClass, "init", "(IIILjava/lang/String;)V");
+            auto entryInit = env->GetStaticMethodID(entryClass, "init", "(IIIILjava/lang/String;)V");
             auto javaStr = env->NewStringUTF(vendingFingerprintValue.c_str());
-            env->CallStaticVoidMethod(entryClass, entryInit, verboseLogs, spoofVendingFinger, spoofVendingSdk, javaStr);
+            env->CallStaticVoidMethod(entryClass, entryInit, verboseLogs, spoofVendingFinger, spoofVendingSdk, spoofVendingBuild, javaStr);
             env->DeleteLocalRef(javaStr);
         } else {
             LOGD("JNI %s: Sending JSON", niceName);

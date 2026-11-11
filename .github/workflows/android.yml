@@ -30,8 +30,19 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    - name: Build with Gradle
-      run: ./gradlew --warning-mode all assembleRelease
+    - name: Setup Gradle (cache deps + wrapper)
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        dependency-graph: disabled
+
+    - name: Build with Gradle (retries)
+      run: |
+        for i in 1 2 3 4 5; do
+          ./gradlew --warning-mode all --no-configuration-cache assembleRelease && exit 0
+          echo "::warning::Gradle attempt $i failed, retrying in 60s"
+          sleep 60
+        done
+        exit 1
 
     - name: Label CI version when not a final release code
       run: |
@@ -40,9 +51,26 @@ jobs:
           perl -pi -e "s/^version=(.*)/version=\$1($VERCODE)-CI #${{ github.run_number }}/" module/module.prop
         fi
 
+    - name: Package labeled arm and x86_64 module zips
+      run: ./gradlew zip zipX86_64
+
     - name: Upload CI module zip as artifact zip
       uses: actions/upload-artifact@v7
       with:
         name: PlayIntegrityFork-CI_#${{ github.run_number }}
         path: 'module/*'
+        compression-level: 9
+
+    - name: Upload arm module zip as artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: PlayIntegrityFork-arm-CI_#${{ github.run_number }}
+        path: out/PlayIntegrityFork.zip
+        compression-level: 9
+
+    - name: Upload x86_64 module zip as artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: PlayIntegrityFork-x86_64-CI_#${{ github.run_number }}
+        path: out/PlayIntegrityFork-x86_64.zip
         compression-level: 9
