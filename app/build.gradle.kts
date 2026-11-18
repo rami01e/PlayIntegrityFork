@@ -28,6 +28,7 @@ android {
         ndk {
             abiFilters += "armeabi-v7a"
             abiFilters += "arm64-v8a"
+            abiFilters += "x86_64"
         }
 
         externalNativeBuild {
@@ -93,8 +94,20 @@ tasks.register<Zip>("zip") {
     destinationDirectory.set(project.rootDir.resolve("out"))
 
     from(project.rootDir.resolve("module"))
+    exclude("zygisk/x86_64.so")
+}
+
+tasks.register<Zip>("zipX86_64") {
+    dependsOn("copyFiles")
+
+    archiveFileName.set("PlayIntegrityFork-x86_64.zip")
+    destinationDirectory.set(project.rootDir.resolve("out"))
+
+    from(project.rootDir.resolve("module"))
+    exclude("zygisk/armeabi-v7a.so")
+    exclude("zygisk/arm64-v8a.so")
 }
 
 afterEvaluate {
-    tasks["assembleRelease"].finalizedBy("copyFiles", "zip")
+    tasks["assembleRelease"].finalizedBy("copyFiles", "zip", "zipX86_64")
 }
