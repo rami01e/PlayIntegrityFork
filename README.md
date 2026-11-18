@@ -13,9 +13,9 @@ A Zygisk module which fixes "MEETS_DEVICE_INTEGRITY" for the Android <13 "device
 To use this module you must have one of the following (latest versions):
 
 - [Magisk](https://github.com/topjohnwu/Magisk) with Zygisk enabled (and Enforce DenyList enabled if NOT also using [Shamiko](https://github.com/LSPosed/LSPosed.github.io/releases) or [Zygisk Assistant](https://github.com/snake-4/Zygisk-Assistant) or [NoHello](https://github.com/MhmRdd/NoHello) or [Treat Wheel](https://github.com/PerformanC/Treat-Wheel-Zygisk), for best results)
-- [KernelSU](https://github.com/tiann/KernelSU) with [Zygisk Next](https://github.com/LSPosed/ZygiskNext) or [ReZygisk](https://github.com/PerformanC/ReZygisk) or [NeoZygisk](https://github.com/JingMatrix/NeoZygisk) module installed
-- [KernelSU Next](https://github.com/KernelSU-Next/KernelSU-Next) with [Zygisk Next](https://github.com/LSPosed/ZygiskNext) or [ReZygisk](https://github.com/PerformanC/ReZygisk) or [NeoZygisk](https://github.com/JingMatrix/NeoZygisk) module installed
-- [APatch](https://github.com/bmax121/APatch) with [Zygisk Next](https://github.com/LSPosed/ZygiskNext) or [ReZygisk](https://github.com/PerformanC/ReZygisk) or [NeoZygisk](https://github.com/JingMatrix/NeoZygisk) module installed
+- [KernelSU](https://github.com/tiann/KernelSU) with [Zygisk Next](https://github.com/Dr-TSNG/ZygiskNext) or [ReZygisk](https://github.com/PerformanC/ReZygisk) or [NeoZygisk](https://github.com/JingMatrix/NeoZygisk) module installed
+- [KernelSU Next](https://github.com/KernelSU-Next/KernelSU-Next) with [Zygisk Next](https://github.com/Dr-TSNG/ZygiskNext) or [ReZygisk](https://github.com/PerformanC/ReZygisk) or [NeoZygisk](https://github.com/JingMatrix/NeoZygisk) module installed
+- [APatch](https://github.com/bmax121/APatch) with [Zygisk Next](https://github.com/Dr-TSNG/ZygiskNext) or [ReZygisk](https://github.com/PerformanC/ReZygisk) or [NeoZygisk](https://github.com/JingMatrix/NeoZygisk) module installed
 
 Note: [SukiSU Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) limits Action button script execution to 10 seconds so is not fully compatible and cannot be recommended.
 
@@ -193,7 +193,7 @@ An advanced feature intended for older Android <10 ROMs, mostly stock ROMs or th
 
 ## About skipping device matching from the Action button
 
-An advanced feature intended for those running a Pixel device that is supported by Google for Pixel Beta program builds but don't want to use the matching Pixel Canary fingerprint for their device when generating one with the Action button. To use a random Pixel Canary fingerprint instead, manually opt-in by creating a file named skipmatchdevice in the module directory after installation, either from a root prompt with `touch /data/adb/modules/playintegrityfix/skipmatchdevice` or from a file explorer app, then reboot.
+An advanced feature intended for those running a Pixel device that is supported by Google for Pixel Beta program builds but don't want to use the matching Pixel Canary fingerprint for their device when generating one with the Action button. To use a random Pixel Canary fingerprint instead, manually opt-in by creating a file named skipmatchdevice in the module directory after installation, either from a root prompt with `touch /data/adb/modules/playintegrityfix/skipmatchdevice` or from a file explorer app, then run Action again.
 
 ## About skipping property deletion
 

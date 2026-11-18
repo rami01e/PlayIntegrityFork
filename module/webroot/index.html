@@ -50,7 +50,7 @@
   .meta{margin-top:8px;font-size:.76rem;color:var(--muted)}
   .dates{margin-top:8px;font-size:.76rem;color:var(--muted)}
 
-  /* segmented source switch */
+  /* segmented mode switch */
   .seg{display:flex;background:var(--surface2);border-radius:12px;padding:4px;gap:4px}
   .seg button{flex:1;border:none;background:none;color:var(--muted);font-size:.9rem;font-weight:600;
     padding:11px;border-radius:9px;cursor:pointer;transition:.15s}
@@ -63,6 +63,14 @@
   .util button:active{transform:scale(.98)}
   button:disabled{opacity:.5;pointer-events:none}
 
+  /* import */
+  #filePicker{display:none}
+  .import-flag{padding:6px 2px;margin:10px 0 4px}
+  .input-base{width:100%;background:var(--surface2);border:1px solid var(--line);color:var(--text);padding:10px;border-radius:11px}
+  .browse-btn{font-size:.85rem;font-weight:600;cursor:pointer;margin-bottom:15px}
+  .custom-input{font-family:monospace;font-size:.8rem;margin-bottom:10px}
+  .mt-0{margin-top:0}
+
   /* advanced */
   details>summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;
     font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
@@ -70,7 +78,7 @@
   details>summary .chev{transition:.2s}
   details[open]>summary .chev{transform:rotate(180deg)}
   .flags{display:flex;flex-direction:column;gap:1px;margin-top:14px}
-  .flag{display:flex;align-items:center;gap:12px;padding:11px 2px;font-size:.9rem}
+  .flag{display:flex;align-items:center;gap:12px;padding:11px 2px;font-size:.9rem;cursor:pointer}
   .flag+.flag{border-top:1px solid var(--line)}
   .flag>span:not(.sw){flex:1}
   .sw{position:relative;width:46px;height:27px;flex:0 0 auto;cursor:pointer}
@@ -79,6 +87,8 @@
   .sw i::after{content:"";position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;transition:.2s}
   .sw input:checked + i{background:var(--accent)}
   .sw input:checked + i::after{transform:translateX(19px)}
+  .border-top{border-top:1px solid var(--line)}
+  #verboseSelect{background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-weight:600;cursor:pointer;outline:none}
 
   /* output */
   #term{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:11px;margin-top:12px;
@@ -119,7 +129,7 @@
     </div>
     <div class="hint" id="hint"></div>
     <div class="util">
-      <button id="reapply">Reapply</button>
+      <button id="generate">Generate</button>
       <button id="killPi">Kill PI Processes</button>
     </div>
   </div>
@@ -127,12 +137,18 @@
   <div class="card">
     <details id="impBox">
       <summary>Import Custom Print<span class="chev">▾</span></summary>
-      <div class="hint" style="margin: 10px 0 10px 0;">Select a local .prop file via Android File Picker:</div>
-      <input type="file" id="filePicker" style="display:none;" onchange="handleFileSelect(event)">
-      <button onclick="document.getElementById('filePicker').click()" style="width:100%; background:var(--surface2); border:1px solid var(--line); color:var(--text); padding:10px; border-radius:11px; font-size:.85rem; font-weight:600; cursor:pointer; margin-bottom:15px;">Browse Local Storage...</button>
-      <div class="hint" style="margin: 0 0 10px 0;">Or download a .prop file via URL:</div>
-      <input type="text" id="customPrintInput" placeholder="https://..." style="width:100%; background:var(--surface2); border:1px solid var(--line); color:var(--text); padding:10px; border-radius:11px; font-family:monospace; font-size:.8rem; margin-bottom:10px;">
-      <div class="util" style="margin-top: 0;">
+      <label class="flag import-flag">
+        <span>Force migration to latest format</span>
+        <span class="sw"><input type="checkbox" id="migrateForce"><i></i></span>
+      </label>
+
+      <div class="hint" style="margin:10px 0">Select a local .prop file via Android File Picker:</div>
+      <input type="file" id="filePicker" onchange="handleFileSelect(event)">
+      <button onclick="document.getElementById('filePicker').click()" class="input-base browse-btn">Browse Local Storage...</button>
+
+      <div class="hint" style="margin:0 0 10px">Or download a .prop file via URL:</div>
+      <input type="text" id="customPrintInput" placeholder="https://..." class="input-base custom-input">
+      <div class="util mt-0">
         <button onclick="submitCustomUrl()">Apply From URL</button>
       </div>
     </details>
@@ -143,18 +159,22 @@
       <summary>Advanced Settings<span class="chev">▾</span></summary>
       <div class="flags" id="flags"></div>
 
-      <label class="flag" style="border-top: 1px solid var(--line); cursor: pointer;">
+      <label class="flag border-top" id="skipAddPropRow">
+        <span>Skip Property Addition</span>
+        <span class="sw"><input type="checkbox" id="skipAddProp"><i></i></span>
+      </label>
+      <label class="flag border-top">
         <span>Skip Property Deletion</span>
         <span class="sw"><input type="checkbox" id="skipDelProp"><i></i></span>
       </label>
-      <label class="flag" style="border-top: 1px solid var(--line); cursor: pointer;">
+      <label class="flag border-top">
         <span>Skip Persist Property Changes</span>
         <span class="sw"><input type="checkbox" id="skipPersistProp"><i></i></span>
       </label>
 
-      <div class="flag" style="border-top: 1px solid var(--line);">
-        <span>Verbose Logs Level</span>
-        <select id="verboseSelect" style="background:var(--surface2); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-weight:600; cursor:pointer; outline:none;">
+      <div class="flag border-top" id="verboseRow">
+        <span>Verbose Logs</span>
+        <select id="verboseSelect">
           <option value="0">0 (Off)</option>
           <option value="1">1</option>
           <option value="2">2</option>
@@ -162,13 +182,17 @@
           <option value="100">100 (Max)</option>
         </select>
       </div>
+
+      <div class="util mt-0">
+        <button onclick="savePifLog()">Save PIF Logcat</button>
+      </div>
     </details>
   </div>
 
   <div class="card">
     <details id="outBox">
       <summary>Output<span class="chev">▾</span></summary>
-      <div id="term"><span class="m">Ready.</span></div>
+      <div id="term"><span class="m">Ready.<br></span></div>
     </details>
   </div>
 </div>
@@ -177,9 +201,10 @@
 const MODID="playintegrityfix";
 const MOD="/data/adb/modules/"+MODID;
 const CFG=MOD+"/custom.pif.prop";
-const MARK=MOD+"/skipmatchdevice";
-const MARK_DELPROP=MOD+"/skipdelprop";
-const MARK_PERSISTPROP=MOD+"/skippersistprop";
+const MARK_SKIPMATCH=MOD+"/skipmatchdevice";
+const MARK_SKIPADD=MOD+"/skipaddprop";
+const MARK_SKIPDEL=MOD+"/skipdelprop";
+const MARK_SKIPPERSIST=MOD+"/skippersistprop";
 const FLAGS=["spoofBuild","spoofProps","spoofProvider","spoofSignature","spoofVendingFinger","spoofVendingSdk"];
 const LABEL={spoofBuild:"Spoof Build",spoofProps:"Spoof Props",spoofProvider:"Spoof Provider",spoofSignature:"Spoof Signature",spoofVendingFinger:"Spoof Vending FINGERPRINT",spoofVendingSdk:"Spoof Vending SDK_INT",verboseLogs:"Verbose Logs"};
 
@@ -199,6 +224,8 @@ function exec(cmd,opts){
 
 function toast(m){try{if(typeof ksu!=="undefined"&&ksu.toast)ksu.toast(m);}catch(e){}}
 
+function busy(b){document.querySelectorAll("button").forEach(x=>x.disabled=b);$("#refresh").disabled=false;}
+
 async function readConfig(){
   const r=await exec(`cat ${CFG} 2>/dev/null`);const map={};
   (r.stdout||"").split("\n").forEach(l=>{
@@ -213,11 +240,13 @@ const val=(m,k)=>m[k]?m[k].value:"";
 async function refresh(){
   let map={},rand=false;
   try{map=await readConfig();}catch(e){log(e.message,"e");}
-  try{rand=(await exec(`[ -f ${MARK} ] && echo 1 || echo 0`)).stdout.trim()==="1";}catch(e){}
+  try{rand=(await exec(`[ -f ${MARK_SKIPMATCH} ] && echo 1 || echo 0`)).stdout.trim()==="1";}catch(e){}
 
-  let skipDel = false, skipPersist = false;
-  try { skipDel = (await exec(`[ -f ${MARK_DELPROP} ] && echo 1 || echo 0`)).stdout.trim()==="1"; } catch(e){}
-  try { skipPersist = (await exec(`[ -f ${MARK_PERSISTPROP} ] && echo 1 || echo 0`)).stdout.trim()==="1"; } catch(e){}
+  let skipAdd = false, skipDel = false, skipPersist = false;
+  try { skipAdd = (await exec(`[ -f ${MARK_SKIPADD} ] && echo 1 || echo 0`)).stdout.trim()==="1"; } catch(e){}
+  try { skipDel = (await exec(`[ -f ${MARK_SKIPDEL} ] && echo 1 || echo 0`)).stdout.trim()==="1"; } catch(e){}
+  try { skipPersist = (await exec(`[ -f ${MARK_SKIPPERSIST} ] && echo 1 || echo 0`)).stdout.trim()==="1"; } catch(e){}
+  $("#skipAddProp").checked = skipAdd;
   $("#skipDelProp").checked = skipDel;
   $("#skipPersistProp").checked = skipPersist;
 
@@ -234,11 +263,11 @@ async function refresh(){
   else{badge.textContent="● Custom";badge.className="badge custom";}
 
   $("#fp").textContent=has?fp:"No fingerprint — choose an option below.";
-  const name=map["MANUFACTURER"].value+" "+map["MODEL"].value;
+  const name=(val(map,"MANUFACTURER")+" "+val(map,"MODEL")).trim();
   const apiTarget=map["*api_level"]||map["ro.product.first_api_level"];
   const api=apiTarget?"First API "+apiTarget.value:"";
   const patchTarget=map["*.security_patch"]||map["ro.build.version.security_patch"];
-  const patch=patchTarget?(patchTarget.commented?"Patch OFF":"Patch "+patchTarget.value):"";
+  const patch=patchTarget?(patchTarget.commented?"Patch Commented":"Patch "+patchTarget.value):"";
   const releaseTest=await exec(`grep -oE 'Released:.*' ${CFG} | tr -d ':'`);
   const release=releaseTest.stdout.trim()?releaseTest.stdout.trim():"";
   const expiryTest=await exec(`grep -oE 'Estimated Expiry:.*' ${CFG} | tr -d ':'`);
@@ -246,53 +275,76 @@ async function refresh(){
   $("#meta").textContent=has?[name,api,patch].filter(Boolean).join("  ·  "):"";
   $("#dates").textContent=has?[release,expiry].filter(Boolean).join("  ·  "):"";
 
-  $("#segMatch").classList.toggle("on",!rand&&has);
+  $("#segMatch").classList.toggle("on",!rand);
   $("#segRandom").classList.toggle("on",rand);
   $("#hint").textContent=rand
     ?"Force a random Pixel Canary print regardless of device."
     :"Match Pixel Canary print on Beta/Canary Program supported Pixel devices, falling back to a random Pixel Canary print.";
 
-  const DEFAULTS={spoofBuild:"1",spoofProps:"1",spoofProvider:"1",spoofSignature:"0",spoofVendingFinger:"0",spoofVendingSdk:"0"};
-  const fl=$("#flags");fl.innerHTML="";
-  FLAGS.forEach(k=>{
-    const on=(map[k]&&!map[k].commented ? map[k].value : DEFAULTS[k])==="1";
-    const el=document.createElement("label");el.className="flag";
-    el.innerHTML=`<span>${LABEL[k]}</span><span class="sw"><input type="checkbox" ${on?"checked":""}><i></i></span>`;
-    el.querySelector("input").addEventListener("change",e=>setFlag(k,e.target.checked?"1":"0"));
-    fl.appendChild(el);
-  });
+  if(has){
+    const fl=$("#flags");fl.innerHTML="";
+    FLAGS.forEach(k=>{
+      const on=map[k]&&map[k].value==="1";
+      const el=document.createElement("label");el.className="flag";
+      el.innerHTML=`<span>${LABEL[k]}</span><span class="sw"><input type="checkbox" ${on?"checked":""}><i></i></span>`;
+      el.querySelector("input").addEventListener("change",e=>setFlag(k,e.target.checked?"1":"0"));
+      fl.appendChild(el);
+    });
+  }
+  $("#flags").style.display=has?"flex":"none";
+  $("#skipAddPropRow").style.borderTop=has?"":"none";
+  $("#verboseRow").style.display=has?"flex":"none";
+}
+
+async function autoPif(mode){
+  busy(true);
+  await refresh();
+  $("#outBox").open=true;
+  toast("Generating Canary fingerprint…");
+  const args=(mode==="random")?"":"-m";
+  log("\n# autopif4.sh "+args,"g");
+  try{
+    const r=await exec(`sh ${MOD}/autopif4.sh ${args} 2>&1`);
+    (r.stdout||"").replace(/\n$/,"").split("\n").forEach(l=>log(l,/error|fail/i.test(l)?"e":(/warn/i.test(l)?"w":null)));
+    log(r.errno===0?"✓ Canary fingerprint applied":"✗ exit "+r.errno,r.errno===0?"g":"e");
+  } catch(e){log(e.message,"e");}
+  await refresh();
+  busy(false);
+}
+
+async function migrateCfg(args){
+  log("\n# migrate.sh "+args,"g");
+  try{
+    const r=await exec(`sh ${MOD}/migrate.sh ${args} ${CFG} 2>&1`);
+    (r.stdout||"").replace(/\n$/,"").split("\n").forEach(l=>log(l,null));
+  } catch(e){log(e.message,"e");}
+}
+
+async function killPi(){
+  log("\n# killpi.sh","g");
+  try{
+    const r=await exec(`sh ${MOD}/killpi.sh 2>&1`);
+    (r.stdout||"").replace(/\n$/,"").split("\n").filter(Boolean).forEach(l=>log(l,null));
+  } catch(e){log(e.message,"e");}
+  log("✓ PI processes killed","g");
+}
+
+async function setMode(mode){
+  try{
+    if(mode==="random"){await exec(`touch ${MARK_SKIPMATCH}`);log("Create skipmatchdevice", "m");}
+    else{await exec(`rm -f ${MARK_SKIPMATCH}`);log("Remove skipmatchdevice", "m");}
+    await refresh();
+  } catch(e){log(e.message,"e");}
 }
 
 async function setFlag(k,v){
   try{
-    // Ensure key exists via migrate.sh if missing, then update/uncomment it
-    await exec(`grep -qE "^[#[:space:]]*${k}=" ${CFG} 2>/dev/null || sh ${MOD}/migrate.sh ${CFG}; sed -i "s;^[#[:space:]]*\\(${k}=\\).*;\\1${v};" ${CFG}`);
+    await exec(`sed -i "s;^[#[:space:]]*\\(${k}=\\).*;\\1${v};" ${CFG}`);
     const status = (k === "verboseLogs") ? v : (v === "1" ? "on" : "off");
     toast(`${LABEL[k] || k} ${status}`);
-    log(`set ${k}=${v}`,"m");
-  }
-  catch(e){log(e.message,"e");}
-}
-
-function busy(b){document.querySelectorAll("button").forEach(x=>x.disabled=b);$("#refresh").disabled=false;}
-
-async function run(args,label){
-  $("#outBox").open=true;log("\n$ autopif4 "+args,"g");
-  try{
-    const r=await exec(`sh ${MOD}/autopif4.sh ${args} 2>&1`);
-    (r.stdout||"").replace(/\n$/,"").split("\n").forEach(l=>log(l,/error|fail/i.test(l)?"e":(/warn/i.test(l)?"w":null)));
-    log(r.errno===0?"✓ "+label:"✗ exit "+r.errno,r.errno===0?"g":"e");
-  }catch(e){log(e.message,"e");}
-}
-
-async function setSource(mode){
-  busy(true);
-  try{
-    toast("Generating Canary fingerprint…");
-    if(mode==="random"){await exec(`touch ${MARK}`);await run("","Canary fingerprint applied");}
-    else{await exec(`rm -f ${MARK}`);await run("-m","Canary fingerprint applied");}
-  }catch(e){log(e.message,"e");}
-  await refresh();busy(false);
+    log(`Set ${k}=${v}`,"m");
+    await killPi();
+  } catch(e){log(e.message,"e");}
 }
 
 async function handleFileSelect(event) {
@@ -300,31 +352,21 @@ async function handleFileSelect(event) {
   if (!file) return;
 
   busy(true);
+  await refresh();
   $("#outBox").open = true;
-  log(`\n$ Reading local file: ${file.name}`, "g");
-
+  toast("Reading fingerprint from file…");
   const reader = new FileReader();
   reader.onload = async function(e) {
     try {
       const text = e.target.result;
       // Base64 encode to safely pass file contents through the root shell
       const b64 = btoa(unescape(encodeURIComponent(text)));
-
       await exec(`echo "${b64}" | base64 -d > ${CFG}`);
-      log(`✓ Copied ${file.name} to ${CFG}`, "g");
-
-      // Ensure Advanced Settings entries exist in imported prop
-      log("$ migrate.sh", "m");
-      await exec(`sh ${MOD}/migrate.sh ${CFG}`);
-
-      // Restart PI processes to apply the print (bypassing autopif4)
-      log("$ killpi.sh", "m");
-      await exec(`sh ${MOD}/killpi.sh`);
-
-      toast("Local print applied");
-    } catch (err) {
-      log(err.message, "e");
-    }
+      log(`Copied ${file.name} to ${CFG}`, "m");
+      await migrateCfg($("#migrateForce").checked?"-p":"");
+      await killPi();
+      log(`✓ Local fingerprint applied`, "g");
+    } catch(err){log(err.message,"e");}
     await refresh();
     busy(false);
     event.target.value = ""; // Reset picker
@@ -338,62 +380,70 @@ async function submitCustomUrl() {
     toast("Please enter a valid http/https URL.");
     return;
   }
-
   // Auto-convert standard GitHub blob links to raw.githubusercontent links
   if (url.includes("github.com") && url.includes("/blob/")) {
     url = url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/");
   }
 
   busy(true);
+  await refresh();
   $("#outBox").open = true;
-  log(`\n$ Fetching print from URL...`, "g");
-
+  toast("Fetching fingerprint from URL…");
   try {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
     const text = await response.text();
     // Base64 encode to safely pass file contents through the root shell
     const b64 = btoa(unescape(encodeURIComponent(text)));
-
     await exec(`echo "${b64}" | base64 -d > ${CFG}`);
-    log("✓ Download successful", "g");
-
-    // Ensure Advanced Settings entries exist in downloaded prop
-    log("$ migrate.sh", "m");
-    await exec(`sh ${MOD}/migrate.sh ${CFG}`);
-
-    // Restart PI processes to apply the print
-    log("$ killpi.sh", "m");
-    await exec(`sh ${MOD}/killpi.sh`);
-
-    toast("URL print applied");
-  } catch (err) {
-    log(`✗ Download failed: ${err.message}`, "e");
-  }
-
+    log(`Downloaded ${url} to ${CFG}`, "m");
+    await migrateCfg($("#migrateForce").checked?"-p":"");
+    await killPi();
+    log(`✓ URL fingerprint applied`, "g");
+    $("#customPrintInput").value = "";
+  } catch(err){log(`✗ Download failed: ${err.message}`, "e");}
   await refresh();
   busy(false);
 }
 
-$("#segMatch").onclick=()=>setSource("match");
-$("#segRandom").onclick=()=>setSource("random");
-$("#reapply").onclick=async()=>{const rand=$("#segRandom").classList.contains("on");await setSource(rand?"random":"match");};
-$("#killPi").onclick=async()=>{busy(true);$("#outBox").open=true;log("\n$ killpi","g");try{const r=await exec(`sh ${MOD}/killpi.sh 2>&1`);(r.stdout||"").replace(/\n$/,"").split("\n").forEach(l=>log(l,"m"));log("✓ PI processes killed","g");}catch(e){log(e.message,"e");}busy(false);};
+async function savePifLog() {
+  busy(true);
+  await refresh();
+  $("#outBox").open=true;
+  toast("Saving PIF Logcat to /sdcard…");
+  log("\n# logcat -d | grep 'PIF/'","g");
+  try{
+    await exec(`logcat -d | grep 'PIF/' >/sdcard/pif.log`);
+    log("✓ Logcat saved to /sdcard/pif.log","g");
+  } catch(e){log(e.message,"e");}
+  busy(false);
+}
+
+$("#segMatch").onclick=()=>setMode("match");
+$("#segRandom").onclick=()=>setMode("random");
+$("#generate").onclick=async()=>{const rand=$("#segRandom").classList.contains("on");await autoPif(rand?"random":"match");};
+$("#killPi").onclick=async()=>{busy(true);await refresh();$("#outBox").open=true;await killPi();busy(false);};
 $("#refresh").onclick=refresh;
 $("#verboseSelect").onchange = (e) => setFlag("verboseLogs", e.target.value);
 
+$("#skipAddProp").onchange = async (e) => {
+  const on = e.target.checked;
+  await exec(on ? `touch ${MARK_SKIPADD}` : `rm -f ${MARK_SKIPADD}`);
+  log(on ? "Create skipaddprop" : "Remove skipaddprop", "m");
+  toast("Reboot required to apply");
+};
+
 $("#skipDelProp").onchange = async (e) => {
   const on = e.target.checked;
-  await exec(on ? `touch ${MARK_DELPROP}` : `rm -f ${MARK_DELPROP}`);
-  log(on ? "$ touch skipdelprop" : "$ rm skipdelprop", "m");
+  await exec(on ? `touch ${MARK_SKIPDEL}` : `rm -f ${MARK_SKIPDEL}`);
+  log(on ? "Create skipdelprop" : "Remove skipdelprop", "m");
   toast("Reboot required to apply");
 };
 
 $("#skipPersistProp").onchange = async (e) => {
   const on = e.target.checked;
-  await exec(on ? `touch ${MARK_PERSISTPROP}` : `rm -f ${MARK_PERSISTPROP}`);
-  log(on ? "$ touch skippersistprop" : "$ rm skippersistprop", "m");
+  await exec(on ? `touch ${MARK_SKIPPERSIST}` : `rm -f ${MARK_SKIPPERSIST}`);
+  log(on ? "Create skippersistprop" : "Remove skippersistprop", "m");
   toast("Reboot required to apply");
 };
 
